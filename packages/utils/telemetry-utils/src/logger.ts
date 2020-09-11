@@ -516,7 +516,6 @@ export class PerformanceEvent {
         if (!this.event) {
             this.logger.sendErrorEvent({
                 eventName: "PerformanceEventAfterStop",
-                perfEventName: this.event!.eventName,
                 eventNameSuffix,
             });
             return;
