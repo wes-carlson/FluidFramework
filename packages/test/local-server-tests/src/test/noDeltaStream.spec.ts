@@ -137,6 +137,10 @@ describe("No Delta Stream", () => {
         assert.strictEqual(await storageOnlyDataObject.root.wait("fluid"), "great");
     });
 
+    it("asdfa", async () => {
+
+    });
+
     afterEach(async () => {
         await deltaConnectionServer.webSocketServer.close();
     });

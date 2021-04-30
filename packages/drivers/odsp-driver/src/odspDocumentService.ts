@@ -19,6 +19,7 @@ import {
 } from "@fluidframework/driver-definitions";
 import {
     canRetryOnError,
+    SessionForbiddenError,
 } from "@fluidframework/driver-utils";
 import { fetchTokenErrorCode, throwOdspNetworkError } from "@fluidframework/odsp-doclib-utils";
 import {
@@ -261,9 +262,21 @@ export class OdspDocumentService implements IDocumentService {
             const websocketTokenPromise = requestWebsocketTokenFromJoinSession
                 ? Promise.resolve(null)
                 : this.getWebsocketToken!(options);
+            const joinSessionPromise = this.joinSession(requestWebsocketTokenFromJoinSession).catch((e) => {
+                if (
+                    e?.error?.code === "sessionForbiddenOnPreservedFiles" ||
+                    e?.error?.code === "sessionForbiddenOnModerationEnabledLibrary" ||
+                    e?.error?.code === "sessionForbiddenOnRequireCheckout"
+                ) {
+                    throw new SessionForbiddenError(e?.error?.code);
+                } else {
+                    throw e;
+                }
+            });
             const [websocketEndpoint, websocketToken, io] =
                 await Promise.all([
-                    this.joinSession(requestWebsocketTokenFromJoinSession),
+                    // this.joinSession(requestWebsocketTokenFromJoinSession),
+                    joinSessionPromise,
                     websocketTokenPromise,
                     this.socketIoClientFactory(),
                 ]);
