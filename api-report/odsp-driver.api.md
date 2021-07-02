@@ -83,6 +83,8 @@ export class OdspDocumentServiceFactoryCore implements IDocumentServiceFactory {
     // (undocumented)
     createDocumentService(resolvedUrl: IResolvedUrl, logger?: ITelemetryBaseLogger): Promise<IDocumentService>;
     // (undocumented)
+    createEmptyContainer(createNewResolvedUrl: IResolvedUrl, logger?: ITelemetryBaseLogger): Promise<IDocumentService>;
+    // (undocumented)
     protected persistedCache: IPersistedCache;
     // (undocumented)
     readonly protocolName = "fluid-odsp:";

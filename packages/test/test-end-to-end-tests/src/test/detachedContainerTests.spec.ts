@@ -98,7 +98,7 @@ describeFullCompat("Detached Container", (getTestObjectProvider) => {
             "Client details should be set with interactive as true");
     });
 
-    it("Attach detached container", async () => {
+    it.only("Attach detached container", async () => {
         const container = await loader.createDetachedContainer(provider.defaultCodeDetails);
         await container.attach(request);
         assert.strictEqual(container.attachState, AttachState.Attached, "Container should be attached");

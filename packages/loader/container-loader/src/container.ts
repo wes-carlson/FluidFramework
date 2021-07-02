@@ -10,7 +10,7 @@ import {
     IDisposable,
     ITelemetryLogger,
 } from "@fluidframework/common-definitions";
-import { assert, performance, unreachableCase } from "@fluidframework/common-utils";
+import { assert, bufferToString, performance, stringToBuffer, unreachableCase } from "@fluidframework/common-utils";
 import {
     IRequest,
     IResponse,
@@ -804,9 +804,6 @@ export class Container extends EventEmitterWithErrorHandling<IContainerEvents> i
             if (this._attachState === AttachState.Detached) {
                 // Get the document state post attach - possibly can just call attach but we need to change the
                 // semantics around what the attach means as far as async code goes.
-                const appSummary: ISummaryTree = this.context.createSummary();
-                const protocolSummary = this.captureProtocolSummary();
-                this.cachedAttachSummary = combineAppAndProtocolSummary(appSummary, protocolSummary);
 
                 // Set the state as attaching as we are starting the process of attaching container.
                 // This should be fired after taking the summary because it is the place where we are
@@ -815,17 +812,15 @@ export class Container extends EventEmitterWithErrorHandling<IContainerEvents> i
                 this._attachState = AttachState.Attaching;
                 this.emit("attaching");
             }
-            assert(!!this.cachedAttachSummary,
-                0x0d7 /* "Summary should be there either by this attach call or previous attach call!!" */);
+            // assert(!!this.cachedAttachSummary,
+            //     0x0d7 /* "Summary should be there either by this attach call or previous attach call!!" */);
 
             const createNewResolvedUrl = await this.urlResolver.resolve(request);
             ensureFluidResolvedUrl(createNewResolvedUrl);
-            const summary = this.cachedAttachSummary;
             // Actually go and create the resolved document
             if (this.service === undefined) {
-                this.service = await runWithRetry(
-                    async () => this.serviceFactory.createContainer(
-                        summary,
+                this.service = await runWithRetry<IDocumentService>(
+                    async () => (this.serviceFactory as any).createEmptyContainer(
                         createNewResolvedUrl,
                         this.subLogger,
                     ),
@@ -841,11 +836,54 @@ export class Container extends EventEmitterWithErrorHandling<IContainerEvents> i
             this._resolvedUrl = resolvedUrl;
             await this.connectStorageService();
 
-            // This we can probably just pass the storage service to the blob manager - although ideally
-            // there just isn't a blob manager
+            // upload blobs here
+            const blobResponse = await this.storageService.createBlob(stringToBuffer("this is a test blob", "utf8"));
+            let redirectTable;
+            if (this.loader.services.detachedBlobStorage !== undefined) {
+                redirectTable = await Promise.all(this.loader.services.detachedBlobStorage.all().map(async ([id, blob]) => {
+                    const res = await this.storageService.createBlob(blob);
+                    return [id, res.id];
+                }));
+            }
+
+            if (redirectTable !== undefined) {
+                (this.context as any).runtime.blobManager.redirect = redirectTable;
+            }
+
+            // post summary here
+            const appSummary: ISummaryTree = this.context.createSummary();
+            const protocolSummary = this.captureProtocolSummary();
+            this.cachedAttachSummary = combineAppAndProtocolSummary(appSummary, protocolSummary);
+            const summary = this.cachedAttachSummary;
+
+            const summaryResponse = await this.storageService.uploadSummaryWithContext(summary, {
+                referenceSequenceNumber: 0,
+                ackHandle: undefined,
+                proposalHandle: undefined,
+            });
+            console.log(summaryResponse);
+            /*
+            await runWithRetry<IDocumentService>(
+                async () => this.serviceFactory.createContainer(
+                    summary,
+                    createNewResolvedUrl,
+                    this.subLogger,
+                ),
+                "containerAttach",
+                (id: string) => this._deltaManager.refreshDelayInfo(id),
+                (id: string, delayMs: number, error: any) =>
+                    this._deltaManager.emitDelayInfo(id, delayMs, CreateContainerError(error)),
+                this.logger,
+            );
+            */
+
             this._attachState = AttachState.Attached;
             this.emit("attached");
             this.cachedAttachSummary = undefined;
+
+            // test
+            const blob = await this.storage.readBlob(blobResponse.id);
+            console.log(bufferToString(blob, "utf8"));
 
             // Propagate current connection state through the system.
             this.propagateConnectionState();

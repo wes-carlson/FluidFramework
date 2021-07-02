@@ -45,6 +45,14 @@ class MockDetachedBlobStorage implements IDetachedBlobStorage {
         assert(blob);
         return blob;
     }
+
+    public all() {
+        return Array.from(this.blobs.entries()).map(([id, blob]) => [id.toString(), blob]) as any;
+    }
+
+    public get size() {
+        return this.blobs.size;
+    }
 }
 
 describeFullCompat("blobs", (getTestObjectProvider) => {
@@ -209,7 +217,7 @@ describeNoCompat("blobs", (getTestObjectProvider) => {
         await assert.rejects(blobP, "promise returned by uploadBlob() did not reject when runtime was disposed");
     });
 
-    it("works in detached container", async function() {
+    it.only("works in detached container", async function() {
         const loader = provider.makeTestLoader(testContainerConfig, new MockDetachedBlobStorage());
         const container = await loader.createDetachedContainer(provider.defaultCodeDetails);
 
@@ -224,9 +232,13 @@ describeNoCompat("blobs", (getTestObjectProvider) => {
         // make sure we are still detached
         assert.strictEqual(container.attachState, AttachState.Detached);
 
-        await assert.rejects(
-            container.attach(provider.driver.createCreateNewRequest(provider.documentId)),
-            "Error: 0x1fa",
-        );
+        await container.attach(provider.driver.createCreateNewRequest(provider.documentId));
+
+        const container2 = await provider.loadTestContainer(testContainerConfig);
+        const dataStore2 = await requestFluidObject<ITestDataObject>(container2, "default");
+
+        const blobHandle2 = await dataStore2._root.wait<IFluidHandle<ArrayBufferLike>>("my blob");
+        assert(blobHandle2);
+        assert.strictEqual(bufferToString(await blobHandle2.get(), "utf-8"), text);
     });
 });

@@ -38,10 +38,6 @@ const isInvalidFileName = (fileName: string): boolean => {
     return !!fileName.match(invalidCharsRegex);
 };
 
-/**
- * Creates a new Fluid file.
- * Returns resolved url
- */
 export async function createNewFluidFile(
     getStorageToken: (options: TokenFetchOptions, name: string) => Promise<string | null>,
     newFileInfo: INewFileInfo,
@@ -91,6 +87,70 @@ export async function createNewFluidFile(
                     ...fetchResponse.commonSpoHeaders,
                 });
                 return content.itemId;
+            },
+            { end: true, cancel: "error" });
+    });
+
+    const odspUrl = createOdspUrl({... newFileInfo, itemId, dataStorePath: "/"});
+    const resolver = new OdspDriverUrlResolver();
+    return resolver.resolve({ url: odspUrl });
+}
+
+/**
+ * Creates a new Fluid file.
+ * Returns resolved url
+ */
+export async function createNewEmptyFluidFile(
+    getStorageToken: (options: TokenFetchOptions, name: string) => Promise<string | null>,
+    newFileInfo: INewFileInfo,
+    logger: ITelemetryLogger,
+    epochTracker: EpochTracker,
+): Promise<IOdspResolvedUrl> {
+    // Check for valid filename before the request to create file is actually made.
+    if (isInvalidFileName(newFileInfo.filename)) {
+        throwOdspNetworkError("Invalid filename. Please try again.", invalidFileNameStatusCode);
+    }
+
+    const filePath = newFileInfo.filePath ? encodeURIComponent(`/${newFileInfo.filePath}`) : "";
+    const encodedFilename = encodeURIComponent(newFileInfo.filename);
+    // const baseUrl =
+    //     `${getApiRoot(getOrigin(newFileInfo.siteUrl))}/drives/${newFileInfo.driveId}/items/root:` +
+    //     `${filePath}/${encodedFilename}`;
+
+    // const containerSnapshot = convertSummaryIntoContainerSnapshot(createNewSummary);
+    // const initialUrl = `${baseUrl}:/opStream/snapshots/snapshot`;
+    const initialUrl =
+        `${getApiRoot(getOrigin(newFileInfo.siteUrl))}/drives/${newFileInfo.driveId}/items/root:/${filePath
+        }/${encodedFilename}:/content?@name.conflictBehavior=rename&select=id,name,parentReference`;
+
+    const itemId = await getWithRetryForTokenRefresh(async (options) => {
+        const storageToken = await getStorageToken(options, "CreateNewFile");
+
+        return PerformanceEvent.timedExecAsync(
+            logger,
+            { eventName: "createNewFile" },
+            async (event) => {
+                const { url, headers } = getUrlAndHeadersWithAuth(initialUrl, storageToken);
+                headers["Content-Type"] = "application/json";
+
+                const fetchResponse = await epochTracker.fetchAndParseAsJSON<ICreateFileResponse>(
+                    url,
+                    {
+                        body: undefined,
+                        headers,
+                        method: "PUT",
+                    },
+                    "createFile");
+
+                const content = fetchResponse.content;
+                if (!content || !content.id) {
+                    throwOdspNetworkError("Could not parse item from Vroom response", fetchIncorrectResponse);
+                }
+                event.end({
+                    headers: Object.keys(headers).length !== 0 ? true : undefined,
+                    ...fetchResponse.commonSpoHeaders,
+                });
+                return content.id;
             },
             { end: true, cancel: "error" });
     });

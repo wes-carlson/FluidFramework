@@ -50,8 +50,13 @@ export class BlobHandle implements IFluidHandle<ArrayBufferLike> {
 
 export class BlobManager {
     public static readonly basePath = "_blobs";
-    private readonly pendingBlobIds: Map<string, Deferred<void>> = new Map();
+    // blobs that have been uploaded and for wich a BlobAttach op has been sent successfully
     private readonly blobIds: Set<string> = new Set();
+    // blobs that have been uploaded but we haven't seen the BlobAttach op round-trip
+    private readonly pendingBlobIds: Map<string, Deferred<void>> = new Map();
+
+    // table of local ID to storage ID for blobs first "uploaded" in detached state then actually uploaded later
+    private readonly redirect: Map<string, string> = new Map();
 
     public get blobCount() { return this.blobIds.size; }
 
@@ -70,12 +75,17 @@ export class BlobManager {
     }
 
     public async getBlob(blobId: string): Promise<IFluidHandle<ArrayBufferLike>> {
-        assert(this.blobIds.has(blobId) || this.pendingBlobIds.has(blobId), 0x11f /* "requesting unknown blobs" */);
-        return new BlobHandle(
-            `${BlobManager.basePath}/${blobId}`,
-            this.routeContext,
-            async () => this.getStorage().readBlob(blobId),
-        );
+        assert(this.blobIds.has(blobId) || this.pendingBlobIds.has(blobId) || this.redirect.has(blobId),
+            0x11f /* "requesting unknown blobs" */);
+        if (this.blobIds.has(blobId) || this.pendingBlobIds.has(blobId)) {
+            return new BlobHandle(
+                `${BlobManager.basePath}/${blobId}`,
+                this.routeContext,
+                async () => this.getStorage().readBlob(blobId),
+            );
+        }
+        assert(this.redirect.has(blobId), 0x11f /* "requesting unknown blobs" */);
+        return this.getBlob(this.redirect.get(blobId)!);
     }
 
     public async createBlob(blob: ArrayBufferLike): Promise<IFluidHandle<ArrayBufferLike>> {
@@ -92,7 +102,6 @@ export class BlobManager {
         );
 
         if (this.runtime.attachState === AttachState.Detached) {
-            this.blobIds.add(response.id);
             return handle;
         }
 

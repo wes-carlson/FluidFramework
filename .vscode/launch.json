@@ -262,6 +262,14 @@
             "request": "launch",
             "name": "Debug Current Test (JS)",
             // "env": { "FLUID_TEST_VERBOSE": "1" },
+            "skipFiles": [
+                "<node_internals>/**/*.js"
+            ],
+            "env": {
+                "fluid__test__driver": "odsp", //values: local, tinylicious, routerlicious, odsp,
+                "login__odsp__test__accounts": "{\"user0@a830edad9050849830E21012616.onmicrosoft.com\":\"Qutu7891\"}",
+                "FLUID_TEST_VERBOSE": "1"
+            },
             "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
             "stopOnEntry": false,
             "sourceMaps": true,

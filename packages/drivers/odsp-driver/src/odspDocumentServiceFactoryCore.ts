@@ -32,7 +32,7 @@ import {
 } from "./epochTracker";
 import { OdspDocumentService } from "./odspDocumentService";
 import { INewFileInfo, getOdspResolvedUrl, createOdspLogger, toInstrumentedOdspTokenFetcher } from "./odspUtils";
-import { createNewFluidFile } from "./createFile";
+import { createNewEmptyFluidFile, createNewFluidFile } from "./createFile";
 
 /**
  * Factory for creating the sharepoint document service. Use this if you want to
@@ -45,6 +45,61 @@ export class OdspDocumentServiceFactoryCore implements IDocumentServiceFactory {
     public readonly protocolName = "fluid-odsp:";
 
     private readonly nonPersistentCache = new NonPersistentCache();
+
+    public async createEmptyContainer(
+        createNewResolvedUrl: IResolvedUrl,
+        logger?: ITelemetryBaseLogger,
+    ): Promise<IDocumentService> {
+        ensureFluidResolvedUrl(createNewResolvedUrl);
+
+        let odspResolvedUrl = getOdspResolvedUrl(createNewResolvedUrl);
+        const [, queryString] = odspResolvedUrl.url.split("?");
+
+        const searchParams = new URLSearchParams(queryString);
+        const filePath = searchParams.get("path");
+        if (filePath === undefined || filePath === null) {
+            throw new Error("File path should be provided!!");
+        }
+        const newFileParams: INewFileInfo = {
+            driveId: odspResolvedUrl.driveId,
+            siteUrl: odspResolvedUrl.siteUrl,
+            filePath,
+            filename: odspResolvedUrl.fileName,
+        };
+
+        const odspLogger = createOdspLogger(logger);
+
+        const cacheAndTracker = createOdspCacheAndTracker(
+            this.persistedCache,
+            this.nonPersistentCache,
+            { resolvedUrl: odspResolvedUrl, docId: odspResolvedUrl.hashedDocumentId },
+            odspLogger);
+
+        return PerformanceEvent.timedExecAsync(
+            odspLogger,
+            {
+                eventName: "CreateNew",
+                isWithSummaryUpload: true,
+            },
+            async (event) => {
+                odspResolvedUrl = await createNewEmptyFluidFile(
+                    toInstrumentedOdspTokenFetcher(
+                        odspLogger,
+                        odspResolvedUrl,
+                        this.getStorageToken,
+                        true /* throwOnNullToken */,
+                    ),
+                    newFileParams,
+                    odspLogger,
+                    cacheAndTracker.epochTracker,
+                );
+                const docService = this.createDocumentServiceCore(odspResolvedUrl, odspLogger, cacheAndTracker);
+                event.end({
+                    docId: odspResolvedUrl.hashedDocumentId,
+                });
+                return docService;
+            });
+    }
 
     public async createContainer(
         createNewSummary: ISummaryTree,
