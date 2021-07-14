@@ -233,7 +233,7 @@
             "request": "launch",
             "name": "Debug Current Mocha Test",
             "env": {
-                // "fluid__test__driver": "odsp" //values: local, tinylicious, routerlicious, odsp,
+                // "fluid__test__driver": "odsp" // values: local, tinylicious, routerlicious, odsp,
                 // "FLUID_TEST_VERBOSE": "1"
             },
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/mocha",
@@ -261,10 +261,16 @@
             "type": "node",
             "request": "launch",
             "name": "Debug Current Test (JS)",
-            // "env": { "FLUID_TEST_VERBOSE": "1" },
+            "env": {
+                "fluid__test__driver": "odsp", // values: local, tinylicious, routerlicious, odsp,
+                "FLUID_TEST_VERBOSE": "1"
+            },
             "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
             "stopOnEntry": false,
             "sourceMaps": true,
+            "skipFiles": [
+                "<node_internals>/**/*.js"
+            ],
             "args": [
                 "--no-timeouts",
                 "--exit",

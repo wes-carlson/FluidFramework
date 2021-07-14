@@ -285,6 +285,10 @@ export class ContainerContext implements IContainerContext {
         this.runtime.setAttachState(AttachState.Attaching);
     }
 
+    setBlobRedirectTable(table: Map<string, string>) {
+        (this.runtime as any).setBlobRedirectTable(table);
+    }
+
     // #region private
 
     private async getRuntimeFactory(): Promise<IRuntimeFactory> {
